@@ -1,0 +1,63 @@
+service: rds-snapshot-manager
+frameworkVersion: '3'
+useDotenv: true
+deprecationNotificationMode: error
+
+provider:
+  name: aws
+  runtime: python3.8
+  region: ${env:CLUSTER_REGION, 'us-east-1'}  # Add fallback
+  environment:
+    RDS_CLUSTER_ID: ${env:RDS_CLUSTER_ID}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - rds:CreateDBClusterSnapshot
+            - rds:DeleteDBClusterSnapshot
+            - rds:DescribeDBClusterSnapshots
+            - rds:CreateDBSnapshot
+            - rds:DeleteDBSnapshot
+            - rds:DescribeDBSnapshots
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - lambda:InvokeFunction
+          Resource: 
+            - "arn:aws:lambda:${self:provider.region}:${env:AWS_ACCOUNT_ID, '123456789012'}:function:${self:service}-${opt:stage, 'prod'}-rdsSnapshotManager"
+
+functions:
+  rdsSnapshotManager:
+    handler: handler.lambda_handler
+    environment:
+      CLUSTER_REGION: ${env:CLUSTER_REGION}  # Loaded from .env
+    events:
+      - schedule:
+          rate: cron(0 0 ? * 3 *) # Adjusted for testing
+          enabled: true
+
+plugins:
+  - serverless-python-requirements
+  - serverless-dotenv-plugin
+
+package:
+  patterns:
+    - "!node_modules/**"   # Exclude node_modules
+    - "!.git/**"           # Exclude .git directory
+    - "!.vscode/**"        # Exclude .vscode directory
+    - "!tests/**"          # Exclude tests directory
+    - "!docs/**"           # Exclude docs directory
+    - "!*.md"              # Exclude Markdown files
+    - "!.env"              # Exclude .env file
+    - "!resource/**"       # Exclude resource directory
+    - "**"                 # Include all other files by default
+    - "!.serverless/**"
+
